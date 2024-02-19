@@ -1,0 +1,113 @@
+---
+title: "Human Text vs. AI Text"
+author: "Quan Nguyen"
+date: "2024-02-11"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+## Intro and Problem
+- The data set is AI vs Human Text from Kaggle
+- This is a binary classification data set where 0 and 1 represents Human Text and AI Text respectively
+- Since it is still raw, I will try to implement ways to see the differences and similarity between the two
+- Methods used for this project includes text processing, explore and cluster data.
+
+## Loading the Data and Libraries
+```{r}
+library(tm)
+library(stringr)
+library(dplyr)
+library(tidyverse)
+
+text_Data <- read_csv("AI_Human.csv")
+label_0 <- text_Data %>%
+  filter(generated == 0) %>%
+  sample_n(100)
+label_1 <- text_Data %>%
+  filter(generated == 1) %>%
+  sample_n(100)
+
+text_Data <- bind_rows(label_0, label_1)
+colnames(text_Data) <- c("text", "label")
+```
+The code above loaded the data set into an object called "text_Data" and since it has no column names, I gave appropriate names so it will be easier to refer to in the future. Next, if there is any empty values in the data set, I omitted them. Since the actual data is too large, I only use a sample size of 200.
+
+
+## Text Processing and Tokenization
+```{r}
+corpus <- Corpus(VectorSource(text_Data$text))
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, stopwords("en"))
+corpus <- tm_map(corpus, stripWhitespace)
+```
+Here, I tokenized all the text in the data set and performed the following steps:
+- Lower-cased all the text
+- Removed all the punctuation
+- Removed numbers
+- Removed stop words 
+- Removed excess white spaces
+These steps ensure that I will only keep the words that contributes to the problem. Here an example of what it looks like after the filtering:
+```{r}
+inspect(corpus[[1]])
+```
+
+## Exploratory Data Analysis (EDA)
+```{r}
+top_words <- function(label) {
+  corpus_label <- subset(corpus, text_Data$label == label)
+  tdm <- TermDocumentMatrix(corpus_label)
+  m <- as.matrix(tdm)
+  total_freq <- colSums(m)
+  terms <- Terms(tdm) 
+  top_words <- terms[order(total_freq, decreasing = TRUE)][1:10] 
+  return(top_words)
+}
+print(top_words(0))
+print(top_words(1))
+```
+Here, I decided to see what are the most common words in both texts, AI and Human, to see if I can find any significance between the two. In order to achieve this, I set the tokens into a matrix that store the value of repeating words to store the memory efficiently. Then, I sort them in descending order and return the top 10 most repeated words using the built-in function Terms(), order().
+
+```{r}
+text_Data$length <- nchar(text_Data$text)
+par(mfrow=c(1,2))
+hist(text_Data$length[text_Data$label == 0], main="Distribution of Text Length (Human)", xlab="Text Length", col="skyblue", border="black")
+hist(text_Data$length[text_Data$label == 1], main="Distribution of Text Length (AI)", xlab="Text Length", col="skyblue", border="black")
+```
+```
+The histogram display the distribution of length in text between the two labels. It can be conclude that AI-text uses more words compare to Human-text to prove a certain point or give a statement, etc.
+```
+
+
+## Clustering Analysis
+```{r}
+dtm <- DocumentTermMatrix(corpus)
+hc <- hclust(dist(as.matrix(dtm)))
+order <- hc$order
+order_label_0 <- order[text_Data$label[order] == 0]
+order_label_1 <- order[text_Data$label[order] == 1]
+new_order <- c(order_label_0, order_label_1)
+
+hc_reordered <- as.dendrogram(hc)
+hc_reordered <- reorder(hc_reordered, new_order)
+
+plot(hc_reordered, main = "Hierarchical Clustering of Text Data (Sorted)", sub = "", xlab = "", ylab = "")
+
+```
+```
+For the dendogram above, I tried sorting the labels by 0's and 1's so it would look less noise. From the left to right is the frequency of words repeated for each label.
+```
+
+
+## Conclusion
+Using some of my NLP techniques, I am able to extract a lot of information regarding AI-text and Human-text, including their "favorite" words, the length of text, etc.
+
+## Reference
+Shayan Gerami, "AI Vs Human Text", Kaggle, https://www.kaggle.com/datasets/shanegerami/ai-vs-human-text?resource=download
